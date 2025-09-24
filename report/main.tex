@@ -1,0 +1,178 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+
+\title{Model Quantization, ONNX, and TensorRT Optimization}
+\author{Sakina Rizvi}
+
+\begin{document}
+\YOLO_PADDLEOCR_TRT
+\begin{abstract}
+This report presents the study and practical workflow of optimizing deep learning models using quantization, ONNX, and TensorRT. YOLO (object detection) and PaddleOCR (text recognition) models were exported to ONNX format, then converted into TensorRT engines with different precision modes (FP32, FP16, and INT8). The models were benchmarked for accuracy and inference speed, highlighting trade-offs between precision, performance, and deployment feasibility on GPUs and edge devices.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+Modern deep learning models such as YOLO for object detection and PaddleOCR for text recognition achieve high accuracy but are often computationally heavy. Deploying them on real-time applications, especially on GPUs or edge devices, requires optimization. 
+
+This project focuses on three optimization tools and techniques:
+\begin{itemize}
+    \item \textbf{Quantization:} Reducing model precision (FP32 $\rightarrow$ FP16/INT8) to shrink size and increase speed.
+    \item \textbf{ONNX:} An open standard for model representation, enabling framework interoperability.
+    \item \textbf{TensorRT:} NVIDIA's inference optimizer for accelerating ONNX models on GPUs.
+\end{itemize}
+
+The objective is to convert YOLO and PaddleOCR models into ONNX and TensorRT engines, apply quantization, and evaluate the accuracy-speed trade-offs.
+
+\section{Background Concepts}
+\subsection{Quantization}
+Quantization reduces numerical precision of weights and activations.  
+\textbf{Types:}
+\begin{itemize}
+    \item \textbf{Post-Training Quantization (PTQ):} Apply quantization after training.
+    \item \textbf{Quantization-Aware Training (QAT):} Train with quantization effects simulated.
+\end{itemize}
+
+\textbf{Precision Modes:}
+\begin{itemize}
+    \item FP32: Full precision, high accuracy, slow.
+    \item FP16: Half precision, faster inference, minimal accuracy drop.
+    \item INT8: Integer precision, 2--4x faster, may lose 1--3\% accuracy.
+\end{itemize}
+
+\textbf{Trade-offs:} Smaller model size, faster inference vs. possible accuracy degradation.
+
+\subsection{ONNX}
+ONNX (Open Neural Network Exchange) is an open format for representing machine learning models.  
+\begin{itemize}
+    \item Enables exporting models from PyTorch, PaddlePaddle, TensorFlow, etc.  
+    \item Provides operator sets and versioning for compatibility.  
+    \item Works with runtimes like ONNX Runtime and accelerators like TensorRT.  
+\end{itemize}
+
+\subsection{TensorRT}
+TensorRT is NVIDIA’s SDK for high-performance deep learning inference.  
+\begin{itemize}
+    \item Optimizes ONNX models into serialized \texttt{.plan} engines.  
+    \item Performs layer fusion, kernel auto-tuning, and precision calibration.  
+    \item Supports FP32, FP16, and INT8 inference modes.  
+\end{itemize}
+
+Workflow:  
+\[
+\text{PyTorch/Paddle Model} \rightarrow \text{ONNX} \rightarrow \text{TensorRT Engine}
+\]
+
+\section{Methodology}
+\subsection{YOLO Export}
+The YOLO model was trained in PyTorch and exported to ONNX using:
+\begin{verbatim}
+python export_yolo.py
+\end{verbatim}
+
+\subsection{PaddleOCR Export}
+PaddleOCR models were exported using Paddle’s ONNX exporter:
+\begin{verbatim}
+python convert_paddleocr.py
+\end{verbatim}
+
+\subsection{TensorRT Conversion}
+ONNX models were converted into TensorRT engines using:
+\begin{verbatim}
+python trt_builder.py
+\end{verbatim}
+Different engines were built for FP32, FP16, and INT8 (with calibration data).
+
+\subsection{Benchmarking}
+Inference speed was measured as frames-per-second (FPS) and latency per image.  
+Accuracy was evaluated using:
+\begin{itemize}
+    \item YOLO: mean Average Precision (mAP) on COCO subset.
+    \item PaddleOCR: F1-score on ICDAR dataset.
+\end{itemize}
+
+\section{Results}
+\subsection{Accuracy Comparison}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Model Variant & Metric & Accuracy Drop & Notes \\
+\midrule
+Original (FP32) & YOLO mAP 50 = 0.502 & - & Baseline \\
+ONNX (FP32)     & 0.501 & $<0.5\%$ & Nearly identical \\
+TRT (FP16)      & 0.497 & $\sim1\%$ & Acceptable loss \\
+TRT (INT8)      & 0.488 & $\sim2-3\%$ & Noticeable drop \\
+\bottomrule
+\end{tabular}
+\caption{YOLO Accuracy Comparison Across Formats.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Model Variant & Metric & Accuracy Drop & Notes \\
+\midrule
+Original (FP32) & OCR F1 = 0.854 & - & Baseline \\
+ONNX (FP32)     & 0.852 & negligible & Same as baseline \\
+TRT (FP16)      & 0.847 & $\sim0.8\%$ & Acceptable \\
+TRT (INT8)      & 0.833 & $\sim2.5\%$ & Faster but less accurate \\
+\bottomrule
+\end{tabular}
+\caption{PaddleOCR Accuracy Comparison Across Formats.}
+\end{table}
+
+\subsection{Speed Comparison}
+\begin{table}[H]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Model Variant & FPS & Latency (ms) \\
+\midrule
+YOLO FP32 & 120 & 8.3 \\
+YOLO TRT FP16 & 220 & 4.5 \\
+YOLO TRT INT8 & 310 & 3.2 \\
+\midrule
+OCR FP32 & 95 & 10.5 \\
+OCR TRT FP16 & 170 & 5.8 \\
+OCR TRT INT8 & 240 & 4.1 \\
+\bottomrule
+\end{tabular}
+\caption{Inference Speed Comparison Across Model Variants.}
+\end{table}
+
+\section{Discussion}
+The experiments confirm that:
+\begin{itemize}
+    \item ONNX exports preserve baseline accuracy.  
+    \item TensorRT FP16 offers nearly 2x speedup with minimal accuracy loss.  
+    \item TensorRT INT8 provides maximum speedup (2--3x faster than FP32) but with $\sim$2--3\% accuracy degradation.  
+\end{itemize}
+
+For real-time applications (e.g., edge devices, video analytics), FP16 offers the best balance. INT8 is useful when speed is critical, and slight accuracy loss is acceptable.
+
+\section{Conclusion}
+This project demonstrated:
+\begin{itemize}
+    \item Quantization reduces precision to accelerate inference.  
+    \item ONNX enables portability across frameworks.  
+    \item TensorRT provides significant speedups with precision calibration.  
+\end{itemize}
+
+Overall, deploying YOLO and PaddleOCR with TensorRT (FP16/INT8) achieves substantial performance gains with acceptable accuracy trade-offs, making them suitable for real-world deployment.
+
+\section{References}
+\begin{itemize}
+    \item PyTorch Quantization Tutorial: \url{https://pytorch.org/docs/stable/quantization.html}
+    \item NVIDIA TensorRT Guide: \url{https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/}
+    \item ONNX Documentation: \url{https://onnx.ai/}
+    \item Ultralytics YOLO Docs: \url{https://docs.ultralytics.com/}
+    \item PaddleOCR Docs: \url{https://github.com/PaddlePaddle/PaddleOCR}
+\end{itemize}
+
+\end{document}
