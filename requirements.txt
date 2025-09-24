@@ -1,0 +1,5 @@
+torch
+paddleocr
+opencv-python
+tensorrt
+numpy
